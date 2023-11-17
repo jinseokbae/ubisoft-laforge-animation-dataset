@@ -4,3 +4,6 @@
 output/
 
 *.pyc
+
+poselib/*
+lafan1/data/*

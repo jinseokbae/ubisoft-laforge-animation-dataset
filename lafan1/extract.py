@@ -163,7 +163,7 @@ def read_bvh(filename, start=None, end=None, order=None):
     rotations = utils.euler_to_quat(np.radians(rotations), order=order)
     rotations = utils.remove_quat_discontinuities(rotations)
 
-    return Anim(rotations, positions, offsets, parents, names)
+    return Anim(rotations, positions, offsets, parents, names), frametime
 
 
 def get_lafan1_set(bvh_path, actors, window=50, offset=20):
