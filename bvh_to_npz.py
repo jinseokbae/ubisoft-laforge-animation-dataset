@@ -12,18 +12,18 @@ from poselib.visualization.common import (
 )
 from tqdm import tqdm
 
-train = False
+train = True
 debug = False
 
 if __name__ == "__main__":
-    bvh_dir = "lafan1/data"
+    bvh_dir = "lafan1/modified_data"
     bvh_files = list(Path(bvh_dir).rglob("*.bvh"))
     if train:
         actors = ['subject1', 'subject2', 'subject3', 'subject4']
     else:
         actors = ['subject5']
 
-    save_dir = "../lafan1_npz"
+    save_dir = "../lafan1_modified_npz"
     split = "train" if train else "test"
     save_dir = os.path.join(save_dir, split)
     os.makedirs(save_dir, exist_ok=True)
@@ -33,7 +33,10 @@ if __name__ == "__main__":
         if subject in actors:
             if debug:
                 print("Processing :", bvh_file)
-            anim, frametime = read_bvh(str(bvh_file))
+            if bvh_dir == "lafan1/modified_data":
+                anim, frametime = read_modified_bvh(str(bvh_file))
+            else:
+                anim, frametime = read_bvh(str(bvh_file))
             fps = round(1 / frametime)
             if debug:
                 print("FPS :", fps)
@@ -100,6 +103,7 @@ if __name__ == "__main__":
                     node_names=node_names,
                     parent_indices=anim.parents,
                     joint_offsets=anim.offsets,
+                    fps=fps,
                 )
             )
 

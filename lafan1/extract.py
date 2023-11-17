@@ -40,6 +40,136 @@ class Anim(object):
         self.bones = bones
 
 
+def read_modified_bvh(filename, start=None, end=None, order=None):
+    """
+    Only when using convert.py
+        from https://gist.github.com/Wasserwecken/0802f3a678931e8408f7b78ecb99b00a
+    Reads a BVH file and extracts animation information.
+
+    :param filename: BVh filename
+    :param start: start frame
+    :param end: end frame
+    :param order: order of euler rotations
+    :return: A simple Anim object conatining the extracted information.
+    """
+
+    f = open(filename, "r")
+
+    i = 0
+    active = -1
+    end_site = False
+
+    names = []
+    orients = np.array([]).reshape((0, 4))
+    offsets = np.array([]).reshape((0, 3))
+    parents = np.array([], dtype=int)
+    channel_start_idx = []
+    nchannels = []
+
+    # Parse the  file, line by line
+    for line in f:
+
+        if "HIERARCHY" in line: continue
+        if "MOTION" in line: continue
+
+        rmatch = re.match(r"ROOT (\w+)", line)
+        if rmatch:
+            names.append(rmatch.group(1))
+            offsets = np.append(offsets, np.array([[0, 0, 0]]), axis=0)
+            orients = np.append(orients, np.array([[1, 0, 0, 0]]), axis=0)
+            parents = np.append(parents, active)
+            active = (len(parents) - 1)
+            continue
+
+        if "{" in line: continue
+
+        if "}" in line:
+            if end_site:
+                end_site = False
+            else:
+                active = parents[active]
+            continue
+
+        offmatch = re.match(r"\s*OFFSET\s+([\-\d\.e]+)\s+([\-\d\.e]+)\s+([\-\d\.e]+)", line)
+        if offmatch:
+            if not end_site:
+                offsets[active] = np.array([list(map(float, offmatch.groups()))])
+            continue
+
+        chanmatch = re.match(r"\s*CHANNELS\s+(\d+)", line)
+        if chanmatch:
+            channels = int(chanmatch.group(1))
+            if len(names) == 0:
+                channel_start_idx.append(0)
+            else:
+                channel_start_idx.append(np.array(nchannels).sum().astype(np.int64))
+            nchannels.append(channels)
+            if order is None:
+                channelis = 0 if channels == 3 else 3
+                channelie = 3 if channels == 3 else 6
+                parts = line.split()[2 + channelis:2 + channelie]
+                if any([p not in channelmap for p in parts]):
+                    continue
+                order = "".join([channelmap[p] for p in parts])
+            continue
+
+        jmatch = re.match("\s*JOINT\s+(\w+)", line)
+        if jmatch:
+            names.append(jmatch.group(1))
+            offsets = np.append(offsets, np.array([[0, 0, 0]]), axis=0)
+            orients = np.append(orients, np.array([[1, 0, 0, 0]]), axis=0)
+            parents = np.append(parents, active)
+            active = (len(parents) - 1)
+            continue
+
+        if "End Site" in line:
+            end_site = True
+            continue
+
+        fmatch = re.match("\s*Frames:\s+(\d+)", line)
+        if fmatch:
+            if start and end:
+                fnum = (end - start) - 1
+            else:
+                fnum = int(fmatch.group(1))
+            positions = offsets[np.newaxis].repeat(fnum, axis=0)
+            rotations = np.zeros((fnum, len(orients), 3))
+            continue
+
+        fmatch = re.match("\s*Frame Time:\s+([\d\.]+)", line)
+        if fmatch:
+            frametime = float(fmatch.group(1))
+            continue
+
+        if (start and end) and (i < start or i >= end - 1):
+            i += 1
+            continue
+
+        dmatch = line.strip().split(' ')
+        if dmatch:
+            data_block = np.array(list(map(float, dmatch)))
+            N = len(parents)
+            fi = i - start if start else i
+            for joint_idx in range(len(names)):
+                s_idx = channel_start_idx[joint_idx]
+                nchannel = nchannels[joint_idx]
+                if nchannel == 6:
+                    if joint_idx == 0: # root
+                        positions[fi, 0] = data_block[0:3]
+                        rotations[fi, 0] = data_block[3:6]
+                    else:
+                        rotations[fi, joint_idx] = data_block[s_idx + 3:s_idx + 6]
+                elif nchannel == 3:
+                    rotations[fi, joint_idx] = data_block[s_idx:s_idx+3]
+            i += 1
+
+    f.close()
+
+    rotations = utils.euler_to_quat(np.radians(rotations), order=order)
+    rotations = utils.remove_quat_discontinuities(rotations)
+
+    return Anim(rotations, positions, offsets, parents, names), frametime
+
 def read_bvh(filename, start=None, end=None, order=None):
     """
     Reads a BVH file and extracts animation information.
