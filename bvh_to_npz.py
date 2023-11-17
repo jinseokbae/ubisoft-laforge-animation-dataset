@@ -69,8 +69,7 @@ if __name__ == "__main__":
             skeleton_motion.local_angular_velocity = local_angular_velocity
 
             ret = dict(
-                root_translation=skeleton_motion.global_translation[:, node_names.index('Hips')], # (T, 3) # heading canonicalization
-                # my_quat_rotate(calc_heading_quat_inv(root_rotation), root_translation)
+                root_translation=skeleton_motion.global_translation[:, node_names.index('Hips')], # (T, 3) 
 
                 root_rotation=skeleton_motion.global_rotation[:, node_names.index('Hips')], # (T, 3) # 
 
