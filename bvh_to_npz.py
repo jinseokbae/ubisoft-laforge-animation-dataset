@@ -11,6 +11,7 @@ from poselib.visualization.common import (
     plot_skeleton_motion_interactive,
 )
 from tqdm import tqdm
+from datetime import datetime, timedelta, timezone
 
 train = True
 debug = False
@@ -23,7 +24,8 @@ if __name__ == "__main__":
     else:
         actors = ['subject5']
 
-    save_dir = "../lafan1_modified_npz"
+    date_str = datetime.now(timezone(timedelta(hours=9))).strftime("_%Y-%b-%d")
+    save_dir = "../lafan1_npz" + date_str
     split = "train" if train else "test"
     save_dir = os.path.join(save_dir, split)
     os.makedirs(save_dir, exist_ok=True)
@@ -41,14 +43,32 @@ if __name__ == "__main__":
             if debug:
                 print("FPS :", fps)
             assert fps % 10 == 0
-            node_names = anim.bones
-            parent_indices = torch.from_numpy(anim.parents)
-            local_translation = torch.from_numpy(anim.offsets)
-            skeleton_tree = SkeletonTree(node_names, parent_indices, local_translation)
             # frames
             global_translation = torch.from_numpy(anim.pos)
             local_rotation = torch.from_numpy(anim.quats)
             local_rotation = torch.cat([local_rotation[..., 1:], local_rotation[..., :1]], dim=-1)
+
+            # basic info
+            node_names = anim.bones
+            parent_indices = torch.from_numpy(anim.parents)
+            local_translation = torch.from_numpy(anim.offsets)
+
+            # toe modification
+            initial_lfoot_quat = local_rotation[0, node_names.index("LeftFoot")].clone()
+            initial_rfoot_quat = local_rotation[0, node_names.index("RightFoot")].clone()
+            local_rotation[:, node_names.index("LeftFoot")] = quat_mul(
+                quat_inverse(initial_lfoot_quat), 
+                local_rotation[:, node_names.index("LeftFoot")]
+            )
+            local_rotation[:, node_names.index("RightFoot")] = quat_mul(
+                quat_inverse(initial_rfoot_quat),
+                local_rotation[:, node_names.index("RightFoot")]
+            )
+            local_translation[node_names.index("LeftToe")] = quat_rotate(initial_lfoot_quat, local_translation[node_names.index("LeftToe")])
+            local_translation[node_names.index("RightToe")] = quat_rotate(initial_rfoot_quat, local_translation[node_names.index("RightToe")])
+            # create skeleton_tree
+            skeleton_tree = SkeletonTree(node_names, parent_indices, local_translation)
+
             # make skeleton motion
             skeleton_state = SkeletonState.from_rotation_and_root_translation(
                 skeleton_tree=skeleton_tree,
